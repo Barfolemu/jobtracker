@@ -3,6 +3,14 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   Jobtracker — single-user job search tracker (Milestone 1: storage + API + UI, no Gmail yet)
 
+Parameters:
+  FrontendOrigin:
+    Type: String
+    Default: http://localhost:5500
+    Description: >
+      Origin the frontend is served from (S3/CloudFront URL in production).
+      Must be an exact origin, not '*' — CORS requests carry the auth cookie.
+
 Globals:
   Function:
     Runtime: python3.12
@@ -13,6 +21,56 @@ Globals:
         TABLE_NAME: !Ref JobTrackerTable
 
 Resources:
+  JobTrackerApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref FrontendOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+        AllowCredentials: true
+
+  JobsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: jobtracker.api.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobTrackerTable
+      Events:
+        ListJobs:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/jobs
+            Method: GET
+        CreateJob:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/jobs
+            Method: POST
+        UpdateJob:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/jobs/{id}
+            Method: PUT
+        DeleteJob:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/jobs/{id}
+            Method: DELETE
+
   JobTrackerTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -31,3 +89,6 @@ Outputs:
   JobTrackerTableName:
     Description: DynamoDB table name
     Value: !Ref JobTrackerTable
+  ApiUrl:
+    Description: Base URL of the HTTP API
+    Value: !Sub "https://${JobTrackerApi}.execute-api.${AWS::Region}.amazonaws.com"
