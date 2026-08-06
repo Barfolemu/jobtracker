@@ -10,6 +10,14 @@ Parameters:
     Description: >
       Origin the frontend is served from (S3/CloudFront URL in production).
       Must be an exact origin, not '*' — CORS requests carry the auth cookie.
+  SessionSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: >
+      Random secret used to sign session cookies. Generate with
+      `openssl rand -hex 32` and pass via --parameter-overrides;
+      do not commit it. Rotating it invalidates all existing sessions.
 
 Globals:
   Function:
@@ -36,6 +44,70 @@ Resources:
         AllowHeaders:
           - Content-Type
         AllowCredentials: true
+      Auth:
+        Authorizers:
+          SessionAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            AuthorizerPayloadFormatVersion: "2.0"
+            EnableSimpleResponses: true
+            Identity:
+              Headers:
+                - cookie
+        DefaultAuthorizer: SessionAuthorizer
+
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: jobtracker.authorizer.handler
+      Environment:
+        Variables:
+          SESSION_SECRET: !Ref SessionSecret
+
+  AuthorizerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AuthorizerFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${JobTrackerApi}/authorizers/*"
+
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: jobtracker.auth.handler
+      Environment:
+        Variables:
+          SESSION_SECRET: !Ref SessionSecret
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobTrackerTable
+      Events:
+        AuthStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/auth/status
+            Method: GET
+            Auth:
+              Authorizer: NONE
+        AuthSetup:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/auth/setup
+            Method: POST
+            Auth:
+              Authorizer: NONE
+        AuthLogin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/auth/login
+            Method: POST
+            Auth:
+              Authorizer: NONE
 
   JobsFunction:
     Type: AWS::Serverless::Function

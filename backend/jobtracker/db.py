@@ -62,3 +62,12 @@ def update_job(job_id: str, fields: dict) -> JobItem | None:
 
 def delete_job(job_id: str) -> None:
     _table.delete_item(Key={"job_id": job_id})
+
+
+def get_config(config_id: str) -> dict | None:
+    response = _table.get_item(Key={"job_id": f"config:{config_id}"})
+    return response.get("Item")
+
+
+def put_config(config_id: str, data: dict) -> None:
+    _table.put_item(Item={"job_id": f"config:{config_id}", **data})
