@@ -1,0 +1,19 @@
+.tab-btn {
+  background: transparent;
+  color: #64748b;
+}
+
+.tab-btn.active {
+  background: #0f172a;
+  color: white;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #e2e8f0;
+  color: #334155;
+}

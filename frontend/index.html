@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Jobtracker</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-slate-100 text-slate-900 min-h-screen">
+
+<!-- Auth screen -->
+<div id="auth-screen" class="hidden min-h-screen flex items-center justify-center px-4">
+  <div class="w-full max-w-sm bg-white rounded-xl shadow p-8">
+    <h1 class="text-xl font-semibold mb-1">Jobtracker</h1>
+    <p id="auth-subtitle" class="text-sm text-slate-500 mb-6">Sign in to continue</p>
+
+    <form id="auth-form" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium mb-1" for="auth-password">Password</label>
+        <input id="auth-password" type="password" required minlength="8"
+               class="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-400" />
+      </div>
+      <button type="submit"
+              class="w-full rounded-lg bg-slate-900 text-white py-2 font-medium hover:bg-slate-700">
+        <span id="auth-submit-label">Sign in</span>
+      </button>
+      <p id="auth-error" class="text-sm text-red-600 hidden"></p>
+    </form>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard-screen" class="hidden max-w-6xl mx-auto px-4 py-8">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold">Jobtracker</h1>
+    <button id="add-job-btn" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-700">
+      + Add Manual Job
+    </button>
+  </div>
+
+  <div class="flex gap-2 mb-4">
+    <button data-tab="active" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Active</button>
+    <button data-tab="inactive" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Non-Active</button>
+  </div>
+
+  <div class="bg-white rounded-xl shadow overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead class="bg-slate-50 text-left text-slate-500">
+        <tr>
+          <th class="px-4 py-3 font-medium">Company</th>
+          <th class="px-4 py-3 font-medium">Role</th>
+          <th class="px-4 py-3 font-medium">Status</th>
+          <th class="px-4 py-3 font-medium">Link</th>
+          <th class="px-4 py-3 font-medium">Found</th>
+          <th class="px-4 py-3 font-medium">Posted</th>
+          <th class="px-4 py-3 font-medium">Source</th>
+          <th class="px-4 py-3 font-medium"></th>
+        </tr>
+      </thead>
+      <tbody id="jobs-tbody"></tbody>
+    </table>
+    <p id="jobs-empty" class="hidden text-center text-slate-400 py-10">No jobs here yet.</p>
+  </div>
+</div>
+
+<!-- Edit / Add modal -->
+<div id="job-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center px-4 z-10">
+  <div class="w-full max-w-lg bg-white rounded-xl shadow p-6 max-h-[90vh] overflow-y-auto">
+    <h2 id="job-modal-title" class="text-lg font-semibold mb-4">Edit Job</h2>
+    <form id="job-form" class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Company</label>
+          <input name="company_name" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Role</label>
+          <input name="role_title" required class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Status</label>
+          <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2">
+            <option value="new">new</option>
+            <option value="reviewed">reviewed</option>
+            <option value="accepted">accepted</option>
+            <option value="applied">applied</option>
+            <option value="interviewing">interviewing</option>
+            <option value="rejected">rejected</option>
+            <option value="filled">filled</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Job Link</label>
+          <input name="job_url" class="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Job Description</label>
+        <textarea name="job_description" rows="4" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Notes</label>
+        <textarea name="notes" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2"></textarea>
+      </div>
+
+      <div class="flex items-center justify-between pt-2">
+        <button type="button" id="delete-job-btn" class="hidden text-sm text-red-600 hover:underline">
+          Delete Position
+        </button>
+        <div class="flex gap-2 ml-auto">
+          <button type="button" id="cancel-job-btn" class="rounded-lg px-4 py-2 text-sm font-medium hover:bg-slate-100">
+            Cancel
+          </button>
+          <button type="submit" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-700">
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
