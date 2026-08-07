@@ -143,6 +143,67 @@ Resources:
             Path: /api/jobs/{id}
             Method: DELETE
 
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "jobtracker-frontend-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  FrontendOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "jobtracker-frontend-oac-${AWS::AccountId}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        Origins:
+          - Id: FrontendS3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+            OriginAccessControlId: !GetAtt FrontendOriginAccessControl.Id
+        DefaultCacheBehavior:
+          TargetOriginId: FrontendS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # AWS Managed-CachingOptimized
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowCloudFrontServicePrincipalReadOnly
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub "${FrontendBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}"
+
   JobTrackerTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -164,3 +225,9 @@ Outputs:
   ApiUrl:
     Description: Base URL of the HTTP API
     Value: !Sub "https://${JobTrackerApi}.execute-api.${AWS::Region}.amazonaws.com"
+  FrontendBucketName:
+    Description: S3 bucket holding the frontend static assets
+    Value: !Ref FrontendBucket
+  FrontendUrl:
+    Description: CloudFront URL the frontend is served from
+    Value: !Sub "https://${FrontendDistribution.DomainName}"

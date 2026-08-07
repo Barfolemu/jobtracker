@@ -79,6 +79,10 @@
         "cloudfront:UpdateDistribution",
         "cloudfront:DeleteDistribution",
         "cloudfront:CreateOriginAccessControl",
+        "cloudfront:GetOriginAccessControl",
+        "cloudfront:UpdateOriginAccessControl",
+        "cloudfront:DeleteOriginAccessControl",
+        "cloudfront:ListOriginAccessControls",
         "cloudfront:CreateInvalidation",
         "cloudfront:TagResource"
       ],

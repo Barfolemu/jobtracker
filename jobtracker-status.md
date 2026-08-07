@@ -1,10 +1,10 @@
 # Jobtracker Status
 
-Last updated: 2026-08-06 (end of session). Pick up here next time.
+Last updated: 2026-08-07 (end of session). Pick up here next time.
 
 ---
 
-## Milestone 1 — Manual tracker: backend done & deployed, frontend hosting deferred
+## Milestone 1 — Manual tracker: DONE, backend + frontend both live in AWS
 
 **Backend: live in AWS, fully verified.**
 - Stack name: `jobtracker`
@@ -13,23 +13,25 @@ Last updated: 2026-08-06 (end of session). Pick up here next time.
 - API URL: `https://uku9sxcbl9.execute-api.us-east-1.amazonaws.com`
 - DynamoDB table: `JobTrackerTable` (PITR enabled)
 - Resources: `JobsFunction`, `AuthFunction`, `AuthorizerFunction` (all Lambda), HTTP API + routes + Lambda authorizer
-- Verified end-to-end via smoke test: `/api/auth/setup` → login → create/list/update/delete job, all correct. Table was left clean afterward (no leftover test data/password).
+- Verified end-to-end via smoke test: `/api/auth/setup` → login → create/list/update/delete job, all correct.
 
-**Frontend: built, tested locally, NOT yet hosted in AWS.**
-- Code is done (`frontend/index.html`, `app.js`, `styles.css`, `config.js`) and confirmed working end-to-end against the live API by serving it locally:
+**Frontend: hosted on S3 + CloudFront, verified end-to-end.**
+- Live URL: **`https://d1uufm32urh929.cloudfront.net`** — this is what to use day-to-day to track jobs (no custom domain yet).
+- Infra: `FrontendBucket` (private S3, `jobtracker-frontend-<AWS_ACCOUNT_ID>`) served through `FrontendDistribution` (CloudFront) via Origin Access Control — bucket is not publicly readable directly, only through CloudFront. Defined in `infra/template.yaml`.
+- Deploy flow for future frontend changes:
   ```
-  cd frontend && python3 -m http.server 5500
+  aws s3 sync frontend/ s3://jobtracker-frontend-<AWS_ACCOUNT_ID>/ --delete --profile claudejobtracker
   ```
-  then open `http://localhost:5500`. This works because the deployed API's CORS `FrontendOrigin` parameter is currently set to `http://localhost:5500`.
-- **Deliberately deferred**: hosting on S3 + CloudFront. Decided to leave it as local-only until we "get it fully deployed" in one go, rather than doing it piecemeal. Do this next session.
-- When we do host it: after CloudFront is up, redeploy the stack with `--parameter-overrides FrontendOrigin=<cloudfront-url>` (see `infra/template.yaml`) so CORS allows the real origin, and update `frontend/config.js`'s `API_BASE_URL` if it ever changes.
+  (No CloudFront invalidation needed unless caching becomes an issue — default cache behavior is `CachingOptimized`.)
+- Backend's `FrontendOrigin` CORS parameter is now set to the CloudFront URL (was `http://localhost:5500` during local dev). If the CloudFront domain ever changes (e.g. distribution recreated), redeploy backend with `--parameter-overrides FrontendOrigin=<new-url>`.
+- Verified via browser: loaded the CloudFront URL, confirmed session cookie from earlier testing still worked (sessions have no expiry), added a manual job, saw it in the Active list, deleted it directly via DynamoDB afterward (the in-app delete button uses a native `confirm()` dialog that browser automation avoids triggering) to leave the table clean. Table still has the pre-existing "test"/"manager" entry from earlier manual testing — left untouched, not created by this session.
 
 ---
 
 ## Open follow-ups (in rough priority order)
 
-1. **Finish Milestone 1 Step 5**: deploy frontend to S3 + CloudFront (or Amplify Hosting), update `FrontendOrigin` param + redeploy backend stack for CORS.
-2. **Narrow the IAM policy.** We're currently running on `jobtracker-claude-code-policy-temp-broad.json` (service-level action wildcards, but resource ARNs still tightly scoped to `jobtracker*`/`JobTrackerTable*`/`role/jobtracker-*`). Plan: pull the actual API calls made during this deploy from CloudTrail (`aws cloudtrail lookup-events --profile claudejobtracker`), fold only what was genuinely used into `jobtracker-claude-code-policy.json` (the narrow target policy — already has the real fixes: SAM transform permission, `aws-sam-cli-managed-default` stack access, API Gateway `/tags/*`), then swap the attached policy back to that.
+1. **Narrow the IAM policy.** Currently running on `jobtracker-claude-code-policy-temp-broad.json` (service-level action wildcards, but resource ARNs still tightly scoped to `jobtracker*`/`JobTrackerTable*`/`role/jobtracker-*`). This session added 4 more CloudFront actions to it (`GetOriginAccessControl`, `UpdateOriginAccessControl`, `DeleteOriginAccessControl`, `ListOriginAccessControls`) after hitting an `AccessDenied` creating the frontend's Origin Access Control — CloudFormation needs to read the OAC's `Id` right after creating it. Plan: pull the actual API calls made from CloudTrail (`aws cloudtrail lookup-events --profile claudejobtracker`), fold only what was genuinely used into `jobtracker-claude-code-policy.json` (the narrow target policy), then swap the attached policy back to that.
+2. **Custom domain.** Ashley bought `ashleycjones.com` and is building a separate personal homepage there (different project). Plan discussed: put that homepage at the root/apex, and once it exists, point a subdomain (e.g. `jobtracker.ashleycjones.com`) at this CloudFront distribution via Route 53 + an ACM cert + a CloudFront alternate domain name. Not started — revisit once the homepage project exists.
 3. **Milestone 2**: Gmail/LinkedIn ingestion agent (see `jobtracker-plan.md`) — not started.
 
 ---
@@ -53,8 +55,9 @@ Last updated: 2026-08-06 (end of session). Pick up here next time.
     --parameter-overrides FrontendOrigin=<origin> SessionSecret=<secret> \
     --no-confirm-changeset --no-fail-on-empty-changeset
   ```
-- **Session secret**: generated via `openssl rand -hex 32` and passed as a `NoEcho` CloudFormation parameter — intentionally not recorded in this repo. It's not retrievable from AWS after the fact (NoEcho parameters aren't readable via the API/console). If a future deploy needs it and it's been lost, generate a new one — this only invalidates existing login sessions (users just log in again with their existing password; the password hash lives separately in DynamoDB and is unaffected).
-- Git: all work through this point is committed on `main` (no remote configured yet). Latest commit: `df97989`.
+- **Session secret**: generated via `openssl rand -hex 32` and passed as a `NoEcho` CloudFormation parameter — intentionally not recorded in this repo. It's not retrievable from AWS after the fact (NoEcho parameters aren't readable via the API/console). If a future deploy needs it and it's been lost, generate a new one — this only invalidates existing login sessions (users just log in again with their existing password; the password hash lives separately in DynamoDB and is unaffected). Confirmed this session: on `sam deploy` to an *existing* stack, omitting a parameter from `--parameter-overrides` preserves its current value rather than erroring — so `SessionSecret` doesn't need to be re-passed on every deploy, only `FrontendOrigin` (or whatever actually changed).
+- **AWS CLI session expiry**: the `claudejobtracker` profile's credentials can expire mid-session (`Your session has expired. Please reauthenticate using 'aws login'`). `aws login --profile claudejobtracker` opens a browser-based flow — has to be run by Ashley directly (via `! aws login --profile claudejobtracker` in chat), not by the agent, since it needs a real browser/terminal.
+- Git: all work through this point is committed on `main` (no remote configured yet).
 
 ---
 
