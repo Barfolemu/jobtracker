@@ -65,6 +65,12 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 
 ## Practical notes for resuming
 
+- **AWS account ID is scrubbed from tracked files** (repo is on GitHub now). Real value lives in `.env` as `AWS_ACCOUNT_ID`. The IAM policy JSON files (`jobtracker-claude-code-policy*.json`) and this doc use the literal placeholder `<AWS_ACCOUNT_ID>` instead. To get a real, pasteable copy of a policy file:
+  ```
+  sed "s/<AWS_ACCOUNT_ID>/$(grep -oP '(?<=AWS_ACCOUNT_ID=).*' .env)/g" jobtracker-claude-code-policy-temp-broad.json
+  ```
+
+
 - SAM CLI is installed in an isolated venv, **not** on system PATH: `~/.venvs/sam-cli/bin/sam`. (System Python is 3.14; Lambda runtime is 3.12, so builds use `sam build --use-container` via Docker rather than a local 3.12 interpreter.)
 - AWS profile: `claudejobtracker` (dedicated IAM user for this project). Verify with:
   ```
