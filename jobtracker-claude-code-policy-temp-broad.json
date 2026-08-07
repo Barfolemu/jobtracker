@@ -1,0 +1,109 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudFormationStackMgmtBroad",
+      "Effect": "Allow",
+      "Action": "cloudformation:*",
+      "Resource": [
+        "arn:aws:cloudformation:*:<AWS_ACCOUNT_ID>:stack/jobtracker*/*",
+        "arn:aws:cloudformation:*:<AWS_ACCOUNT_ID>:stack/aws-sam-cli-managed-default*/*"
+      ]
+    },
+    {
+      "Sid": "CloudFormationServerlessTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:*:aws:transform/Serverless-2016-10-31"
+    },
+    {
+      "Sid": "SamDeployArtifactsAndFrontendBucketBroad",
+      "Effect": "Allow",
+      "Action": "s3:*",
+      "Resource": [
+        "arn:aws:s3:::jobtracker*",
+        "arn:aws:s3:::jobtracker*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-default*",
+        "arn:aws:s3:::aws-sam-cli-managed-default*/*"
+      ]
+    },
+    {
+      "Sid": "LambdaFunctionsBroad",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:*:<AWS_ACCOUNT_ID>:function:jobtracker-*"
+    },
+    {
+      "Sid": "ApiGatewayHttpApiBroad",
+      "Effect": "Allow",
+      "Action": "apigateway:*",
+      "Resource": [
+        "arn:aws:apigateway:*::/apis",
+        "arn:aws:apigateway:*::/apis/*",
+        "arn:aws:apigateway:*::/tags/*"
+      ]
+    },
+    {
+      "Sid": "DynamoDbJobTrackerTableBroad",
+      "Effect": "Allow",
+      "Action": "dynamodb:*",
+      "Resource": "arn:aws:dynamodb:*:<AWS_ACCOUNT_ID>:table/JobTrackerTable*"
+    },
+    {
+      "Sid": "IamRolesForLambdaOnlyBroad",
+      "Effect": "Allow",
+      "Action": "iam:*",
+      "Resource": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobtracker-*"
+    },
+    {
+      "Sid": "PassRoleOnlyToServicesThisAppUses",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/jobtracker-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": [
+            "lambda.amazonaws.com",
+            "scheduler.amazonaws.com",
+            "apigateway.amazonaws.com"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "CloudFrontForFrontendHosting",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateDistribution",
+        "cloudfront:GetDistribution",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:CreateOriginAccessControl",
+        "cloudfront:CreateInvalidation",
+        "cloudfront:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SecretsManagerGmailCredsBroad",
+      "Effect": "Allow",
+      "Action": "secretsmanager:*",
+      "Resource": "arn:aws:secretsmanager:*:<AWS_ACCOUNT_ID>:secret:jobtracker*"
+    },
+    {
+      "Sid": "EventBridgeSchedulerForGmailScanBroad",
+      "Effect": "Allow",
+      "Action": "scheduler:*",
+      "Resource": "arn:aws:scheduler:*:<AWS_ACCOUNT_ID>:schedule/*/jobtracker-*"
+    },
+    {
+      "Sid": "LambdaLogGroupsBroad",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": [
+        "arn:aws:logs:*:<AWS_ACCOUNT_ID>:log-group:/aws/lambda/jobtracker-*",
+        "arn:aws:logs:*:<AWS_ACCOUNT_ID>:log-group:/aws/lambda/jobtracker-*:*"
+      ]
+    }
+  ]
+}
