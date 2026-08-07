@@ -18,6 +18,23 @@ Parameters:
       Random secret used to sign session cookies. Generate with
       `openssl rand -hex 32` and pass via --parameter-overrides;
       do not commit it. Rotating it invalidates all existing sessions.
+  GoogleClientId:
+    Type: String
+    Description: OAuth2 client ID from the Google Cloud project (see .env).
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: OAuth2 client secret from the Google Cloud project (see .env).
+  GoogleRefreshToken:
+    Type: String
+    NoEcho: true
+    Description: >
+      Gmail readonly-scope refresh token from backend/scripts/gmail_auth.py
+      (see .env).
+  OpenAiApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenAI API key used by the LangChain extraction chain (see .env).
 
 Globals:
   Function:
@@ -203,6 +220,57 @@ Resources:
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${FrontendDistribution}"
+
+  GmailAgentSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: jobtracker-gmail-agent
+      SecretString: !Sub |
+        {
+          "google_client_id": "${GoogleClientId}",
+          "google_client_secret": "${GoogleClientSecret}",
+          "google_refresh_token": "${GoogleRefreshToken}",
+          "openai_api_key": "${OpenAiApiKey}"
+        }
+
+  GmailAgentDepsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: jobtracker-gmail-agent-deps
+      ContentUri: ../backend/layers/gmail_agent_deps/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: python3.12
+
+  GmailAgentFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../backend/
+      Handler: jobtracker.gmail_agent.handler
+      Timeout: 60
+      MemorySize: 256
+      Layers:
+        - !Ref GmailAgentDepsLayer
+      Environment:
+        Variables:
+          GMAIL_AGENT_SECRET_ARN: !Ref GmailAgentSecret
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref JobTrackerTable
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref GmailAgentSecret
+      Events:
+        ScheduledScan:
+          Type: ScheduleV2
+          Properties:
+            Name: jobtracker-gmail-scan
+            ScheduleExpression: "rate(60 minutes)"
+            FlexibleTimeWindow:
+              Mode: "OFF"
 
   JobTrackerTable:
     Type: AWS::DynamoDB::Table
