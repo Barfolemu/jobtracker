@@ -57,7 +57,7 @@ Last updated: 2026-08-07 (end of session). Pick up here next time.
   ```
 - **Session secret**: generated via `openssl rand -hex 32` and passed as a `NoEcho` CloudFormation parameter — intentionally not recorded in this repo. It's not retrievable from AWS after the fact (NoEcho parameters aren't readable via the API/console). If a future deploy needs it and it's been lost, generate a new one — this only invalidates existing login sessions (users just log in again with their existing password; the password hash lives separately in DynamoDB and is unaffected). Confirmed this session: on `sam deploy` to an *existing* stack, omitting a parameter from `--parameter-overrides` preserves its current value rather than erroring — so `SessionSecret` doesn't need to be re-passed on every deploy, only `FrontendOrigin` (or whatever actually changed).
 - **AWS CLI session expiry**: the `claudejobtracker` profile's credentials can expire mid-session (`Your session has expired. Please reauthenticate using 'aws login'`). `aws login --profile claudejobtracker` opens a browser-based flow — has to be run by Ashley directly (via `! aws login --profile claudejobtracker` in chat), not by the agent, since it needs a real browser/terminal.
-- Git: all work through this point is committed on `main` (no remote configured yet).
+- Git: all work through this point is committed on `main` (no remote configured yet). Latest commit: `72bdca6`.
 
 ---
 
