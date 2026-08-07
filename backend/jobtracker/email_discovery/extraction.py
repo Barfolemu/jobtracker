@@ -15,11 +15,12 @@ _PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You extract the company name and job title from a job-alert email. "
-            "Give your best guess even if the email is ambiguous, and reflect your "
-            "certainty in the confidence score rather than refusing to answer.",
+            "You extract the company name and job title from a short snippet of a "
+            "job-alert email describing a single job posting. Give your best guess "
+            "even if the snippet is ambiguous, and reflect your certainty in the "
+            "confidence score rather than refusing to answer.",
         ),
-        ("human", "Subject: {subject}\n\nBody:\n{body}"),
+        ("human", "{text}"),
     ]
 )
 
@@ -29,5 +30,5 @@ def build_extraction_chain(model: str = DEFAULT_MODEL):
     return _PROMPT | llm.with_structured_output(JobExtraction)
 
 
-def extract(chain, subject: str, body: str) -> JobExtraction:
-    return chain.invoke({"subject": subject, "body": body[:4000]})
+def extract(chain, text: str) -> JobExtraction:
+    return chain.invoke({"text": text[:2000]})

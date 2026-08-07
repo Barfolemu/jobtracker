@@ -13,10 +13,13 @@ class EmailMessage:
 class CandidateJob:
     """A job posting referenced by an email, identified cheaply and deterministically
     (no LLM involved) so it can be checked against the dedupe table before doing any
-    further, costlier work."""
+    further, costlier work. `card_text` is the isolated snippet describing just this
+    job — an email may bundle several jobs together (a digest), so this must not be
+    the whole email body."""
 
     job_id: str
     job_url: str
+    card_text: str
 
 
 class BaseEmailDiscoveryAgent(ABC):
@@ -31,9 +34,9 @@ class BaseEmailDiscoveryAgent(ABC):
     source_name: str
 
     @abstractmethod
-    def identify(self, email: EmailMessage) -> CandidateJob | None:
-        """Return the job this email references, or None if it isn't a job alert."""
+    def identify(self, email: EmailMessage) -> list[CandidateJob]:
+        """Return every job this email references (an email may bundle several)."""
 
     @abstractmethod
-    def enrich(self, email: EmailMessage) -> tuple[str, str]:
+    def enrich(self, candidate: CandidateJob) -> tuple[str, str]:
         """Return (company_name, role_title) for a job confirmed to be new."""

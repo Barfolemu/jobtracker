@@ -26,28 +26,26 @@ def _run_agent(agent: BaseEmailDiscoveryAgent, gmail: GmailClient) -> tuple[int,
     for message_id in gmail.search_message_ids(query):
         email = gmail.get_message(message_id)
 
-        candidate = agent.identify(email)
-        if candidate is None:
-            continue
-        if db.get_job(candidate.job_id) is not None:
-            skipped += 1
-            continue
+        for candidate in agent.identify(email):
+            if db.get_job(candidate.job_id) is not None:
+                skipped += 1
+                continue
 
-        company_name, role_title = agent.enrich(email)
-        job = JobItem(
-            job_id=candidate.job_id,
-            company_name=company_name,
-            role_title=role_title,
-            status=Status.NEW,
-            job_url=candidate.job_url,
-            found_by=agent.source_name,
-            date_found=datetime.now(timezone.utc).isoformat(),
-        )
-        try:
-            db.put_job(job)
-            found += 1
-        except db.JobAlreadyExistsError:
-            skipped += 1
+            company_name, role_title = agent.enrich(candidate)
+            job = JobItem(
+                job_id=candidate.job_id,
+                company_name=company_name,
+                role_title=role_title,
+                status=Status.NEW,
+                job_url=candidate.job_url,
+                found_by=agent.source_name,
+                date_found=datetime.now(timezone.utc).isoformat(),
+            )
+            try:
+                db.put_job(job)
+                found += 1
+            except db.JobAlreadyExistsError:
+                skipped += 1
 
     return found, skipped
 
