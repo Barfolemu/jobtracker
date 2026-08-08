@@ -46,7 +46,7 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 - Infra: `FrontendBucket` (private S3, `jobtracker-frontend-<AWS_ACCOUNT_ID>`) served through `FrontendDistribution` (CloudFront) via Origin Access Control — bucket is not publicly readable directly, only through CloudFront. Defined in `infra/template.yaml`.
 - Deploy flow for future frontend changes:
   ```
-  aws s3 sync frontend/ s3://jobtracker-frontend-<AWS_ACCOUNT_ID>/ --delete --profile claudejobtracker
+  aws s3 sync frontend/ s3://jobtracker-frontend-<AWS_ACCOUNT_ID>/ --delete --profile jobtracker
   ```
   (No CloudFront invalidation needed unless caching becomes an issue — default cache behavior is `CachingOptimized`.)
 - Backend's `FrontendOrigin` CORS parameter is now set to `https://jobtracker.ashleycjones.com` (was the CloudFront default URL before this session, `http://localhost:5500` during local dev before that). `AllowOrigins` is a list with both the custom domain and the CloudFront default URL hardcoded, so both keep working. If the CloudFront domain ever changes (e.g. distribution recreated), redeploy backend with `--parameter-overrides FrontendOrigin=<new-url>` and update the hardcoded fallback entry in `template.yaml`.
@@ -63,10 +63,9 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 
 ## Open follow-ups (in rough priority order)
 
-1. **Narrow the IAM policy.** Currently running on `jobtracker-claude-code-policy-temp-broad.json` (service-level action wildcards, but resource ARNs still tightly scoped to `jobtracker*`/`JobTrackerTable*`/`role/jobtracker-*`/this one hosted zone). Rounds of additions so far: 4 CloudFront actions for the frontend's Origin Access Control (`GetOriginAccessControl`, `UpdateOriginAccessControl`, `DeleteOriginAccessControl`, `ListOriginAccessControls`); a `LambdaLayersBroad` statement for the Gmail agent's dependency layer (`lambda:*` on the separate `layer:jobtracker-*` ARN namespace, which the existing function-scoped statement didn't cover); and, this session, `AcmForCustomDomainBroad` (`acm:*` scoped to `arn:aws:acm:us-east-1:<AWS_ACCOUNT_ID>:certificate/*`), `Route53ForJobtrackerSubdomainBroad` (`route53:*` scoped to `arn:aws:route53:::hostedzone/Z100267432EXOMIZRJ9K3`), and `Route53GetChangeBroad` (`route53:GetChange`, resource must be `*` — this action doesn't support resource-level scoping). Plan: pull the actual API calls made from CloudTrail (`aws cloudtrail lookup-events --profile claudejobtracker`), fold only what was genuinely used into `jobtracker-claude-code-policy.json` (the narrow target policy), then swap the attached policy back to that.
-2. **Custom domain.** Done this session — see the "Custom domain" section above under Milestone 1.
-3. **Extend ingestion beyond LinkedIn.** The `BaseEmailDiscoveryAgent` interface (`backend/jobtracker/email_discovery/base.py`) was built specifically so an Indeed (or other source) agent can be added without touching `gmail_agent.py`'s orchestration or the dedupe logic — just a new `identify()`/`enrich()` implementation plus registering it in the `agents` list in `gmail_agent.py`. Not started.
-4. **Model/prompt tuning.** Extraction currently uses `gpt-4o-mini` with a fairly minimal prompt (`backend/jobtracker/email_discovery/extraction.py`) and a flat 0.4 confidence threshold for falling back to "Needs Review". Worked cleanly on real LinkedIn alerts in testing, but hasn't been stress-tested against edge cases (unusual formatting, non-English postings, etc.) — revisit if "Needs Review" shows up often in practice.
+1. **Custom domain.** Done — see the "Custom domain" section above under Milestone 1.
+2. **Extend ingestion beyond LinkedIn.** The `BaseEmailDiscoveryAgent` interface (`backend/jobtracker/email_discovery/base.py`) was built specifically so an Indeed (or other source) agent can be added without touching `gmail_agent.py`'s orchestration or the dedupe logic — just a new `identify()`/`enrich()` implementation plus registering it in the `agents` list in `gmail_agent.py`. Not started.
+3. **Model/prompt tuning.** Extraction currently uses `gpt-4o-mini` with a fairly minimal prompt (`backend/jobtracker/email_discovery/extraction.py`) and a flat 0.4 confidence threshold for falling back to "Needs Review". Worked cleanly on real LinkedIn alerts in testing, but hasn't been stress-tested against edge cases (unusual formatting, non-English postings, etc.) — revisit if "Needs Review" shows up often in practice.
 
 ---
 
@@ -79,16 +78,16 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 
 
 - SAM CLI is installed in an isolated venv, **not** on system PATH: `~/.venvs/sam-cli/bin/sam`. (System Python is 3.14; Lambda runtime is 3.12, so builds use `sam build --use-container` via Docker rather than a local 3.12 interpreter.)
-- AWS profile: `claudejobtracker` (dedicated IAM user for this project). Verify with:
+- AWS profile: `jobtracker` (assumes `jobtracker-dev-role-broad` via the `ashley-dev` base user — see `AWSSETUP.md`). Verify with:
   ```
-  aws sts get-caller-identity --profile claudejobtracker
+  aws sts get-caller-identity --profile jobtracker
   ```
 - Deploy artifacts bucket: `jobtracker-sam-artifacts-<AWS_ACCOUNT_ID>` (self-managed, not SAM's auto `--resolve-s3` bootstrap — we hit permission issues with that path and switched to an explicit bucket; kept for consistency).
 - Deploy command used (now includes the Gmail agent params, sourced from `.env`; `SessionSecret` omitted since it's preserved automatically — see below):
   ```
   cd infra
   set -a; source ../.env; set +a
-  AWS_PROFILE=claudejobtracker ~/.venvs/sam-cli/bin/sam deploy \
+  AWS_PROFILE=jobtracker ~/.venvs/sam-cli/bin/sam deploy \
     --stack-name jobtracker \
     --s3-bucket jobtracker-sam-artifacts-<AWS_ACCOUNT_ID> \
     --s3-prefix jobtracker \
@@ -105,7 +104,7 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
   `.env` (gitignored, repo root) holds `OPENAI_API_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN` — the latter comes from running `uv run backend/scripts/gmail_auth.py` once.
 - **`aws lambda invoke` can double-invoke on a slow cold start.** Hit this manually testing `GmailAgentFunction`: the CLI retried mid-flight while the first call was still cold-starting (~16s: init + Gmail/OpenAI calls), and the response actually returned was from the redundant second (fast, warm) call. Both invocations really ran server-side — check CloudWatch for multiple `RequestId`s in one log stream if a result looks suspiciously different from what you expect. Not a bug in our code; it's exactly why `gmail_agent.py`'s dedupe-before-write design matters — the duplicate call correctly saw everything as already-written and wrote nothing twice.
 - **Session secret**: generated via `openssl rand -hex 32` and passed as a `NoEcho` CloudFormation parameter — intentionally not recorded in this repo. It's not retrievable from AWS after the fact (NoEcho parameters aren't readable via the API/console). If a future deploy needs it and it's been lost, generate a new one — this only invalidates existing login sessions (users just log in again with their existing password; the password hash lives separately in DynamoDB and is unaffected). Confirmed this session: on `sam deploy` to an *existing* stack, omitting a parameter from `--parameter-overrides` preserves its current value rather than erroring — so `SessionSecret` doesn't need to be re-passed on every deploy, only `FrontendOrigin` (or whatever actually changed).
-- **AWS CLI session expiry**: the `claudejobtracker` profile's credentials can expire mid-session (`Your session has expired. Please reauthenticate using 'aws login'`). `aws login --profile claudejobtracker` opens a browser-based flow — has to be run by Ashley directly (via `! aws login --profile claudejobtracker` in chat), not by the agent, since it needs a real browser/terminal.
+- **AWS CLI session expiry**: the underlying `ashley-dev` session can expire mid-session (`Your session has expired. Please reauthenticate using 'aws login'`). `aws login --profile ashley-dev` opens a browser-based flow — has to be run by Ashley directly (via `! aws login --profile ashley-dev` in chat), not by the agent, since it needs a real browser/terminal. The `jobtracker` profile just assumes a role from that session, so it re-authenticates automatically once `ashley-dev` is refreshed.
 - Git: repo now has a GitHub remote (`origin` → `Barfolemu/jobtracker`). Latest commit on `main`: `9a561cc`. This session's changes (`infra/template.yaml`, `jobtracker-claude-code-policy-temp-broad.json`, this file) are **uncommitted** as of this status update — not committed automatically, only on explicit request.
 
 ---
@@ -114,5 +113,5 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 
 - `jobtracker-brief.md` — original spec
 - `jobtracker-plan.md` — milestone breakdown (source of truth for what Step X means)
-- `jobtracker-claude-code-policy.json` — narrow/target IAM policy for the deploying user
-- `jobtracker-claude-code-policy-temp-broad.json` — currently-attached broadened policy (temporary)
+- `jobtracker-claude-code-policy.json` — earlier narrow policy draft, superseded — not being pursued further, see note below
+- `jobtracker-claude-code-policy-temp-broad.json` — the policy actually attached to `jobtracker-dev-role-broad`, kept broadened permanently (decision made 2026-08-08: not narrowing further)
