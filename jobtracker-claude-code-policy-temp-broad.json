@@ -95,6 +95,24 @@
       "Resource": "*"
     },
     {
+      "Sid": "AcmForCustomDomainBroad",
+      "Effect": "Allow",
+      "Action": "acm:*",
+      "Resource": "arn:aws:acm:us-east-1:<AWS_ACCOUNT_ID>:certificate/*"
+    },
+    {
+      "Sid": "Route53ForJobtrackerSubdomainBroad",
+      "Effect": "Allow",
+      "Action": "route53:*",
+      "Resource": "arn:aws:route53:::hostedzone/Z100267432EXOMIZRJ9K3"
+    },
+    {
+      "Sid": "Route53GetChangeBroad",
+      "Effect": "Allow",
+      "Action": "route53:GetChange",
+      "Resource": "*"
+    },
+    {
       "Sid": "SecretsManagerGmailCredsBroad",
       "Effect": "Allow",
       "Action": "secretsmanager:*",
