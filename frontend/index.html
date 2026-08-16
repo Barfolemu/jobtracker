@@ -39,20 +39,29 @@
     </button>
   </div>
 
-  <div class="flex gap-2 mb-4">
-    <button data-tab="active" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Active</button>
-    <button data-tab="inactive" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Non-Active</button>
+  <div class="flex flex-wrap gap-2 mb-4">
+    <button data-view="active" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Active</button>
+    <button data-view="new" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">New</button>
+    <button data-view="reviewed" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Reviewed</button>
+    <button data-view="accepted" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Accepted</button>
+    <button data-view="applied" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Applied</button>
+    <button data-view="interviewing" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Interviewing</button>
+    <button data-view="inactive" class="tab-btn rounded-lg px-4 py-1.5 text-sm font-medium">Inactive</button>
   </div>
 
   <div class="bg-white rounded-xl shadow overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="bg-slate-50 text-left text-slate-500">
         <tr>
-          <th class="px-4 py-3 font-medium">Company</th>
+          <th class="px-4 py-3 font-medium" aria-sort="none">
+            <button type="button" class="sort-btn" data-sort="company_name">Company <span class="sort-indicator">↕</span></button>
+          </th>
           <th class="px-4 py-3 font-medium">Role</th>
           <th class="px-4 py-3 font-medium">Status</th>
           <th class="px-4 py-3 font-medium">Link</th>
-          <th class="px-4 py-3 font-medium">Found</th>
+          <th class="px-4 py-3 font-medium" aria-sort="descending">
+            <button type="button" class="sort-btn" data-sort="date_found">Found <span class="sort-indicator">↓</span></button>
+          </th>
           <th class="px-4 py-3 font-medium">Posted</th>
           <th class="px-4 py-3 font-medium">Source</th>
           <th class="px-4 py-3 font-medium"></th>
@@ -82,15 +91,7 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Status</label>
-          <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2">
-            <option value="new">new</option>
-            <option value="reviewed">reviewed</option>
-            <option value="accepted">accepted</option>
-            <option value="applied">applied</option>
-            <option value="interviewing">interviewing</option>
-            <option value="rejected">rejected</option>
-            <option value="filled">filled</option>
-          </select>
+          <select name="status" class="w-full rounded-lg border border-slate-300 px-3 py-2"></select>
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">Job Link</label>

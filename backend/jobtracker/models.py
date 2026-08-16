@@ -10,6 +10,7 @@ class Status(str, Enum):
     INTERVIEWING = "interviewing"
     REJECTED = "rejected"
     FILLED = "filled"
+    DUPLICATE = "duplicate"
 
 
 ACTIVE_STATUSES = {

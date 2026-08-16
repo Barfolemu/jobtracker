@@ -1,6 +1,24 @@
 # Jobtracker Status
 
-Last updated: 2026-08-07 (end of session, custom domain work). Pick up here next time.
+Last updated: 2026-08-16 (status navigation + table sorting increment, plus a same-day addendum and two production fixes). Pick up here next time.
+
+---
+
+## Status navigation & table sorting increment — DONE, deployed and verified
+
+Derived from `requirements/archive/jobtracker-status-navigation-sorting-brief-v1.0.md` / `-plan-v2.0.md`. Replaced the two-tab Active/Non-Active dashboard with seven nav controls (Active, New, Reviewed, Accepted, Applied, Interviewing, Inactive — each active status gets its own view, Inactive combines rejected/filled/duplicate), added a new `duplicate` status, and added click-to-sort on the Company and Found columns.
+
+- `backend/jobtracker/models.py`: added `Status.DUPLICATE = "duplicate"`; `ACTIVE_STATUSES` untouched, so it derives `is_active=False` automatically. No other backend changes needed.
+- `frontend/app.js` / `frontend/index.html`: added a `STATUS_LABELS` map so every status renders Title Case ("New", "Interviewing", ...) in the nav, the inline row dropdown, and the Add/Edit modal dropdown, while values/API payloads stay lowercase. The modal dropdown is now JS-populated from `STATUSES` instead of hardcoded `<option>`s. `currentTab`/`setTab` renamed to `currentView`/`setView`; `loadJobs()` filters the active-jobs response client-side to a specific status when one of the five active-status views is selected.
+- Sorting is a pure client-side re-sort on every `loadJobs()` call (no new API params) — Company does locale-aware case-insensitive A–Z/Z–A; Found parses `date_found` timestamps and always pushes missing/invalid dates to the end regardless of direction. Sort state persists across view switches since it's never reset by `setView()`. Accessibility: `aria-sort` on the sortable `<th>`s, `aria-label` on the sort buttons, decorative arrow in a separate `<span>`.
+- Deployed via `sam build --use-container && sam deploy` (backend) + `aws s3 sync frontend/` (frontend), both against the existing `jobtracker` stack/bucket — no template, parameter, or infra changes.
+- Verified live at `https://jobtracker.ashleycjones.com`: all acceptance criteria in the plan's brief walked manually (nav filtering, Title Case labels with lowercase values/payloads confirmed via the accessibility tree, Company/Found sorting and direction toggling, `aria-sort` state), plus a full Duplicate round-trip (added a job as Duplicate → appeared under Inactive → changed via inline dropdown to Interviewing → disappeared from Inactive, appeared under Interviewing) using a disposable test row, deleted afterward via `dynamodb delete-item` (not the UI's `confirm()` delete, to keep browser automation safe). No console errors during testing.
+
+**Post-deploy fix — CloudFront cache mismatch**: right after the first deploy, nav clicks always landed on Inactive regardless of which tab was clicked. Root cause: the CDN/browser was still serving an old cached `app.js` (pre-increment, reading `data-tab`/`currentTab`) against the new `index.html` (`data-view`, 7 buttons) — `btn.dataset.tab` was `undefined` on every button, so `currentTab` stayed `undefined`, which always evaluated to the inactive fetch. Not a data issue (confirmed no statuses were actually changed). Fixed with `aws cloudfront create-invalidation --distribution-id E35DM4ITC5EY7O --paths "/*"`; a one-time local hard refresh clears anything already cached in a given browser. Now invalidating proactively after every frontend `s3 sync` for this kind of index.html+app.js paired change.
+
+**Local dev testing enabled**: `infra/template.yaml`'s `JobTrackerApi` CORS `AllowOrigins` now also includes `http://localhost:5500` (third hardcoded entry, alongside `FrontendOrigin` and the CloudFront default URL) so `python3 -m http.server 5500` in `frontend/` can talk to the live API end-to-end for pre-deploy testing. Session cookie is `Secure; SameSite=None` with no `Domain` set, and `http://localhost` is treated as a secure context by browsers, so this works without touching auth. Going forward: test locally on `localhost:5500` before doing the final prod deploy, rather than deploying straight to prod first.
+
+**Addendum — sortable column discoverability**: Company/Found weren't visibly distinguishable as sortable before interacting with them. Added a muted `↕` indicator on the unselected sortable column, `↑`/`↓` on the selected one (replacing the earlier `▲`/`▼`-or-blank scheme), and a hover color shift on both sort buttons — implemented in `frontend/index.html` (static initial glyphs), `frontend/app.js` (`updateSortHeaderUI()`), `frontend/styles.css` (`.sort-indicator` muted/active colors, `.sort-btn:hover`). `aria-sort`/`aria-label` behavior unchanged. Verified locally first (initial state, toggle direction, reversion of the other column, real `:hover` color change via the browser's actual hover state, no indicator leakage onto non-sortable headers) before deploying to prod.
 
 ---
 

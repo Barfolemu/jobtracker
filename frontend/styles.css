@@ -8,6 +8,33 @@
   color: white;
 }
 
+.sort-btn {
+  background: transparent;
+  border: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sort-btn:hover {
+  color: #0f172a;
+}
+
+.sort-btn:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 2px;
+}
+
+.sort-indicator {
+  margin-left: 2px;
+  color: #94a3b8;
+}
+
+.sort-indicator-active {
+  color: inherit;
+}
+
 .status-badge {
   display: inline-block;
   padding: 2px 8px;

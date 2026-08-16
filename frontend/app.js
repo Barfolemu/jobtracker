@@ -1,8 +1,16 @@
 const API_BASE = window.JOBTRACKER_CONFIG.API_BASE_URL;
-const STATUSES = ["new", "reviewed", "accepted", "applied", "interviewing", "rejected", "filled"];
+const STATUSES = ["new", "reviewed", "accepted", "applied", "interviewing", "rejected", "filled", "duplicate"];
+const STATUS_LABELS = {
+  new: "New", reviewed: "Reviewed", accepted: "Accepted", applied: "Applied",
+  interviewing: "Interviewing", rejected: "Rejected", filled: "Filled", duplicate: "Duplicate",
+};
+const statusLabel = (status) => STATUS_LABELS[status] || status;
+const ACTIVE_STATUS_VALUES = ["new", "reviewed", "accepted", "applied", "interviewing"];
 
-let currentTab = "active";
+let currentView = "active";
 let editingJobId = null;
+let sortColumn = "date_found";
+let sortDirection = "desc"; // newest first
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -75,23 +83,23 @@ $("#auth-form").addEventListener("submit", async (e) => {
 function showDashboard() {
   $("#auth-screen").classList.add("hidden");
   $("#dashboard-screen").classList.remove("hidden");
-  setTab("active");
+  setView("active");
 }
 
-function setTab(tab) {
-  currentTab = tab;
+function setView(view) {
+  currentView = view;
   document.querySelectorAll(".tab-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.tab === tab);
+    btn.classList.toggle("active", btn.dataset.view === view);
   });
   loadJobs();
 }
 
 document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => setTab(btn.dataset.tab));
+  btn.addEventListener("click", () => setView(btn.dataset.view));
 });
 
 async function loadJobs() {
-  const active = currentTab === "active";
+  const active = currentView !== "inactive";
   let jobs;
   try {
     jobs = await apiFetch(`/api/jobs?active=${active}`);
@@ -99,8 +107,72 @@ async function loadJobs() {
     if (err.status === 401) return showAuthScreen();
     throw err;
   }
-  renderJobs(jobs);
+  if (ACTIVE_STATUS_VALUES.includes(currentView)) {
+    jobs = jobs.filter((job) => job.status === currentView);
+  }
+  renderJobs(sortJobs(jobs));
+  updateSortHeaderUI();
 }
+
+// ---------- Sorting ----------
+
+function sortJobs(jobs) {
+  const sorted = jobs.slice();
+  const dir = sortDirection === "desc" ? -1 : 1;
+
+  if (sortColumn === "company_name") {
+    sorted.sort((a, b) => dir * a.company_name.localeCompare(b.company_name, undefined, { sensitivity: "base" }));
+  } else if (sortColumn === "date_found") {
+    sorted.sort((a, b) => {
+      const aTime = Date.parse(a.date_found);
+      const bTime = Date.parse(b.date_found);
+      const aInvalid = Number.isNaN(aTime);
+      const bInvalid = Number.isNaN(bTime);
+      if (aInvalid && bInvalid) return 0;
+      if (aInvalid) return 1;
+      if (bInvalid) return -1;
+      return dir * (aTime - bTime);
+    });
+  }
+
+  return sorted;
+}
+
+function updateSortHeaderUI() {
+  document.querySelectorAll(".sort-btn").forEach((btn) => {
+    const th = btn.closest("th");
+    const indicator = btn.querySelector(".sort-indicator");
+    const column = btn.dataset.sort;
+    const label = column === "company_name" ? "Company" : "Found";
+
+    if (column === sortColumn) {
+      const ariaSort = sortDirection === "asc" ? "ascending" : "descending";
+      const arrow = sortDirection === "asc" ? "↑" : "↓";
+      th.setAttribute("aria-sort", ariaSort);
+      indicator.textContent = arrow;
+      indicator.classList.add("sort-indicator-active");
+      btn.setAttribute("aria-label", `Sort by ${label}, ${ariaSort}`);
+    } else {
+      th.setAttribute("aria-sort", "none");
+      indicator.textContent = "↕";
+      indicator.classList.remove("sort-indicator-active");
+      btn.setAttribute("aria-label", `Sort by ${label}`);
+    }
+  });
+}
+
+document.querySelectorAll(".sort-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const column = btn.dataset.sort;
+    if (sortColumn === column) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      sortColumn = column;
+      sortDirection = column === "company_name" ? "asc" : "desc";
+    }
+    loadJobs();
+  });
+});
 
 function renderJobs(jobs) {
   const tbody = $("#jobs-tbody");
@@ -130,7 +202,7 @@ function renderJobs(jobs) {
     for (const status of STATUSES) {
       const opt = document.createElement("option");
       opt.value = status;
-      opt.textContent = status;
+      opt.textContent = statusLabel(status);
       opt.selected = status === job.status;
       statusSelect.appendChild(opt);
     }
@@ -162,6 +234,13 @@ function escapeHtml(str) {
 }
 
 // ---------- Add / Edit modal ----------
+
+for (const status of STATUSES) {
+  const opt = document.createElement("option");
+  opt.value = status;
+  opt.textContent = statusLabel(status);
+  $("#job-form").status.appendChild(opt);
+}
 
 $("#add-job-btn").addEventListener("click", () => openAddModal());
 $("#cancel-job-btn").addEventListener("click", closeModal);

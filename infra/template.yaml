@@ -65,6 +65,7 @@ Resources:
         AllowOrigins:
           - !Ref FrontendOrigin
           - https://d1uufm32urh929.cloudfront.net
+          - http://localhost:5500
         AllowMethods:
           - GET
           - POST
