@@ -8,7 +8,7 @@ Last updated: 2026-08-07 (end of session, custom domain work). Pick up here next
 
 Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv` for backend dependency management (see below), LangChain (`langchain-openai`, model `gpt-4o-mini`) for company/role extraction instead of regex, since email formatting varies too much for reliable regex parsing.
 
-**Code structure** (source of truth for "what does the agent do" — see `jobtracker-plan.md` Milestone 2 for the original spec):
+**Code structure** (source of truth for "what does the agent do" — see `requirements/archive/jobtracker-plan.md` Milestone 2 for the original spec):
 - `backend/jobtracker/gmail_agent.py` — Lambda handler/orchestrator. Loads creds from Secrets Manager, runs each source agent, writes new jobs to DynamoDB.
 - `backend/jobtracker/email_discovery/base.py` — `BaseEmailDiscoveryAgent` interface: `identify()` (cheap/deterministic — is this a job alert?) and `enrich()` (may call an LLM — only for jobs confirmed new, so re-scanning already-known emails never costs an OpenAI call).
 - `backend/jobtracker/email_discovery/linkedin.py` — `LinkedInJobAgent`: job-URL regex (`https://www\.linkedin\.com/(?:comm/)?jobs/view/(\d+)`), fallback text ("Needs Review" / "LinkedIn Job") for low-confidence extractions.
@@ -71,9 +71,9 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 
 ## Practical notes for resuming
 
-- **AWS account ID is scrubbed from tracked files** (repo is on GitHub now). Real value lives in `.env` as `AWS_ACCOUNT_ID`. The IAM policy JSON files (`jobtracker-claude-code-policy*.json`) and this doc use the literal placeholder `<AWS_ACCOUNT_ID>` instead. To get a real, pasteable copy of a policy file:
+- **AWS account ID is scrubbed from tracked files** (repo is on GitHub now). Real value lives in `.env` as `AWS_ACCOUNT_ID`. The IAM policy JSON file (`aws/iam/jobtracker-claude-code-policy-temp-broad.json`) and this doc use the literal placeholder `<AWS_ACCOUNT_ID>` instead. To get a real, pasteable copy of the policy file:
   ```
-  sed "s/<AWS_ACCOUNT_ID>/$(grep -oP '(?<=AWS_ACCOUNT_ID=).*' .env)/g" jobtracker-claude-code-policy-temp-broad.json
+  sed "s/<AWS_ACCOUNT_ID>/$(grep -oP '(?<=AWS_ACCOUNT_ID=).*' .env)/g" aws/iam/jobtracker-claude-code-policy-temp-broad.json
   ```
 
 
@@ -105,13 +105,12 @@ Auto-populates the tracker from LinkedIn job-alert emails. Stack decisions: `uv`
 - **`aws lambda invoke` can double-invoke on a slow cold start.** Hit this manually testing `GmailAgentFunction`: the CLI retried mid-flight while the first call was still cold-starting (~16s: init + Gmail/OpenAI calls), and the response actually returned was from the redundant second (fast, warm) call. Both invocations really ran server-side — check CloudWatch for multiple `RequestId`s in one log stream if a result looks suspiciously different from what you expect. Not a bug in our code; it's exactly why `gmail_agent.py`'s dedupe-before-write design matters — the duplicate call correctly saw everything as already-written and wrote nothing twice.
 - **Session secret**: generated via `openssl rand -hex 32` and passed as a `NoEcho` CloudFormation parameter — intentionally not recorded in this repo. It's not retrievable from AWS after the fact (NoEcho parameters aren't readable via the API/console). If a future deploy needs it and it's been lost, generate a new one — this only invalidates existing login sessions (users just log in again with their existing password; the password hash lives separately in DynamoDB and is unaffected). Confirmed this session: on `sam deploy` to an *existing* stack, omitting a parameter from `--parameter-overrides` preserves its current value rather than erroring — so `SessionSecret` doesn't need to be re-passed on every deploy, only `FrontendOrigin` (or whatever actually changed).
 - **AWS CLI session expiry**: the underlying `ashley-dev` session can expire mid-session (`Your session has expired. Please reauthenticate using 'aws login'`). `aws login --profile ashley-dev` opens a browser-based flow — has to be run by Ashley directly (via `! aws login --profile ashley-dev` in chat), not by the agent, since it needs a real browser/terminal. The `jobtracker` profile just assumes a role from that session, so it re-authenticates automatically once `ashley-dev` is refreshed.
-- Git: repo now has a GitHub remote (`origin` → `Barfolemu/jobtracker`). Latest commit on `main`: `9a561cc`. This session's changes (`infra/template.yaml`, `jobtracker-claude-code-policy-temp-broad.json`, this file) are **uncommitted** as of this status update — not committed automatically, only on explicit request.
+- Git: repo now has a GitHub remote (`origin` → `Barfolemu/jobtracker`). Latest commit on `main`: `9a561cc`. This session's changes (`infra/template.yaml`, `aws/iam/jobtracker-claude-code-policy-temp-broad.json`, this file) are **uncommitted** as of this status update — not committed automatically, only on explicit request.
 
 ---
 
 ## Reference docs in this repo
 
-- `jobtracker-brief.md` — original spec
-- `jobtracker-plan.md` — milestone breakdown (source of truth for what Step X means)
-- `jobtracker-claude-code-policy.json` — earlier narrow policy draft, superseded — not being pursued further, see note below
-- `jobtracker-claude-code-policy-temp-broad.json` — the policy actually attached to `jobtracker-dev-role-broad`, kept broadened permanently (decision made 2026-08-08: not narrowing further)
+- `requirements/archive/jobtracker-brief.md` — original spec (finished/archived — see the README in that directory)
+- `requirements/archive/jobtracker-plan.md` — milestone breakdown (source of truth for what Step X means; finished/archived)
+- `aws/iam/jobtracker-claude-code-policy-temp-broad.json` — the policy actually attached to `jobtracker-dev-role-broad`, kept broadened permanently (decision made 2026-08-08: not narrowing further). The earlier narrow policy draft has been removed — this project uses IAM roles, so there's no reason to maintain two variants.
