@@ -18,3 +18,6 @@ client_secret_*.json
 
 # Claude Code local settings
 .claude/
+
+# Local launcher (hardcodes the AWS account ID)
+start-claude-with-remote-control.sh
