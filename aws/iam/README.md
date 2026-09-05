@@ -20,3 +20,8 @@ An earlier, narrower draft policy (`jobtracker-claude-code-policy.json`)
 existed before this one and has been removed — this project uses IAM
 roles rather than a standalone user, so there's no reason to maintain two
 policy variants.
+
+When we need to make edits to this policy, add the new permissions, copy 
+the file and replace the <AWS_ACCOUNT_ID>  with the account id, so the 
+file can be a pure replacement in IAM.   The user will log into IAM, edit
+the policy, delete what is there and replace it with what is in the file.

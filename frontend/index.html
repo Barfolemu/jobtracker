@@ -33,7 +33,20 @@
 <!-- Dashboard -->
 <div id="dashboard-screen" class="hidden max-w-6xl mx-auto px-4 py-8">
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold">Jobtracker</h1>
+    <div class="flex items-center gap-2 relative">
+      <h1 class="text-2xl font-semibold">Jobtracker</h1>
+      <button id="notification-bell" type="button" aria-label="Notifications"
+              class="relative rounded-full p-1.5 text-slate-400 hover:bg-slate-200">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" class="w-5 h-5">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+        </svg>
+        <span id="notification-dot" class="hidden absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500"></span>
+      </button>
+      <div id="notification-popover"
+           class="hidden absolute left-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm text-slate-700 z-20"></div>
+    </div>
     <button id="add-job-btn" class="rounded-lg bg-slate-900 text-white px-4 py-2 text-sm font-medium hover:bg-slate-700">
       + Add Manual Job
     </button>

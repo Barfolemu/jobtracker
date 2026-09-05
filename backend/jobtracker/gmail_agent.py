@@ -51,23 +51,38 @@ def _run_agent(agent: BaseEmailDiscoveryAgent, gmail: GmailClient) -> tuple[int,
 
 
 def handler(event, context):
-    secrets = _load_secrets()
-    os.environ["OPENAI_API_KEY"] = secrets["openai_api_key"]
+    started = datetime.now(timezone.utc).isoformat()
+    try:
+        secrets = _load_secrets()
+        os.environ["OPENAI_API_KEY"] = secrets["openai_api_key"]
 
-    gmail = GmailClient(
-        client_id=secrets["google_client_id"],
-        client_secret=secrets["google_client_secret"],
-        refresh_token=secrets["google_refresh_token"],
-    )
+        gmail = GmailClient(
+            client_id=secrets["google_client_id"],
+            client_secret=secrets["google_client_secret"],
+            refresh_token=secrets["google_refresh_token"],
+        )
 
-    agents = [LinkedInJobAgent()]
+        agents = [LinkedInJobAgent()]
 
-    totals = {"found": 0, "skipped": 0}
-    for agent in agents:
-        found, skipped = _run_agent(agent, gmail)
-        totals["found"] += found
-        totals["skipped"] += skipped
-        print(f"[{agent.source_name}] found={found} skipped={skipped}")
+        totals = {"found": 0, "skipped": 0}
+        for agent in agents:
+            found, skipped = _run_agent(agent, gmail)
+            totals["found"] += found
+            totals["skipped"] += skipped
+            print(f"[{agent.source_name}] found={found} skipped={skipped}")
 
-    print(f"Gmail agent run complete: {totals}")
-    return totals
+        print(f"Gmail agent run complete: {totals}")
+        db.put_config("ingestion_status", {
+            "last_run_at": started,
+            "success": True,
+            "found": totals["found"],
+            "skipped": totals["skipped"],
+        })
+        return totals
+    except Exception as e:
+        db.put_config("ingestion_status", {
+            "last_run_at": started,
+            "success": False,
+            "error": f"{type(e).__name__}: {e}",
+        })
+        raise

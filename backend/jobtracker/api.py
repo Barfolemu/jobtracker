@@ -2,6 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
+from . import db
 from .db import (
     delete_job as db_delete_job,
     list_jobs as db_list_jobs,
@@ -47,6 +48,8 @@ def handler(event, context):
             return _handle_update(event)
         if method == "DELETE" and path.startswith("/api/jobs/"):
             return _handle_delete(event)
+        if method == "GET" and path == "/api/ingestion-status":
+            return _handle_ingestion_status()
     except json.JSONDecodeError:
         return _response(400, {"error": "invalid JSON body"})
     except ValueError as e:
@@ -101,3 +104,7 @@ def _handle_delete(event):
     job_id = event["pathParameters"]["id"]
     db_delete_job(job_id)
     return _response(204)
+
+
+def _handle_ingestion_status():
+    return _response(200, db.get_config("ingestion_status"))

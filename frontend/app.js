@@ -12,6 +12,9 @@ let editingJobId = null;
 let sortColumn = "date_found";
 let sortDirection = "desc"; // newest first
 
+const INGESTION_STALE_HOURS = 3;
+let ingestionMessage = null;
+
 const $ = (selector) => document.querySelector(selector);
 
 async function apiFetch(path, options = {}) {
@@ -84,7 +87,66 @@ function showDashboard() {
   $("#auth-screen").classList.add("hidden");
   $("#dashboard-screen").classList.remove("hidden");
   setView("active");
+  checkIngestionStatus();
 }
+
+// ---------- Notifications ----------
+
+function computeIngestionMessage(status) {
+  if (!status) return null;
+  const when = new Date(status.last_run_at).toLocaleString();
+  if (status.success === false) {
+    return `Job import is failing (last attempt ${when}): ${status.error}`;
+  }
+  const ageHours = (Date.now() - new Date(status.last_run_at)) / 3600000;
+  if (ageHours > INGESTION_STALE_HOURS) {
+    return `Job import hasn't succeeded since ${when} — check the Gmail agent.`;
+  }
+  return null;
+}
+
+function updateNotificationBell() {
+  const bell = $("#notification-bell");
+  const dot = $("#notification-dot");
+  if (ingestionMessage) {
+    bell.classList.add("text-amber-500");
+    bell.classList.remove("text-slate-400");
+    dot.classList.remove("hidden");
+  } else {
+    bell.classList.remove("text-amber-500");
+    bell.classList.add("text-slate-400");
+    dot.classList.add("hidden");
+    $("#notification-popover").classList.add("hidden");
+  }
+}
+
+async function checkIngestionStatus() {
+  try {
+    const status = await apiFetch("/api/ingestion-status");
+    ingestionMessage = computeIngestionMessage(status);
+  } catch (err) {
+    ingestionMessage = null;
+  }
+  updateNotificationBell();
+}
+
+$("#notification-bell").addEventListener("click", () => {
+  const popover = $("#notification-popover");
+  if (popover.classList.contains("hidden")) {
+    popover.textContent = ingestionMessage || "No new notifications.";
+    popover.classList.remove("hidden");
+  } else {
+    popover.classList.add("hidden");
+  }
+});
+
+document.addEventListener("click", (e) => {
+  const bell = $("#notification-bell");
+  const popover = $("#notification-popover");
+  if (!popover.classList.contains("hidden") && !bell.contains(e.target) && !popover.contains(e.target)) {
+    popover.classList.add("hidden");
+  }
+});
 
 function setView(view) {
   currentView = view;

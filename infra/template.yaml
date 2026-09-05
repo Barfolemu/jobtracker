@@ -47,6 +47,12 @@ Parameters:
     Type: String
     Default: Z100267432EXOMIZRJ9K3
     Description: Route 53 hosted zone ID for ashleycjones.com.
+  AlertEmail:
+    Type: String
+    Description: >
+      Email address to notify when GmailAgentFunction errors (see .env).
+      SNS sends a one-time confirmation link to this address after deploy
+      that must be clicked before alarm emails will deliver.
 
 Globals:
   Function:
@@ -173,6 +179,12 @@ Resources:
             ApiId: !Ref JobTrackerApi
             Path: /api/jobs/{id}
             Method: DELETE
+        GetIngestionStatus:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref JobTrackerApi
+            Path: /api/ingestion-status
+            Method: GET
 
   FrontendBucket:
     Type: AWS::S3::Bucket
@@ -311,6 +323,34 @@ Resources:
             ScheduleExpression: "rate(60 minutes)"
             FlexibleTimeWindow:
               Mode: "OFF"
+
+  IngestionAlertTopic:
+    Type: AWS::SNS::Topic
+
+  IngestionAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+      TopicArn: !Ref IngestionAlertTopic
+
+  GmailAgentErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Fires when GmailAgentFunction raises an error on its hourly scan.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref GmailAgentFunction
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref IngestionAlertTopic
 
   JobTrackerTable:
     Type: AWS::DynamoDB::Table

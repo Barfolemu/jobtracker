@@ -132,6 +132,18 @@
         "arn:aws:logs:*:<AWS_ACCOUNT_ID>:log-group:/aws/lambda/jobtracker-*",
         "arn:aws:logs:*:<AWS_ACCOUNT_ID>:log-group:/aws/lambda/jobtracker-*:*"
       ]
+    },
+    {
+      "Sid": "SnsIngestionAlertTopicBroad",
+      "Effect": "Allow",
+      "Action": "sns:*",
+      "Resource": "arn:aws:sns:*:<AWS_ACCOUNT_ID>:jobtracker-*"
+    },
+    {
+      "Sid": "CloudWatchAlarmsForGmailAgentBroad",
+      "Effect": "Allow",
+      "Action": "cloudwatch:*",
+      "Resource": "arn:aws:cloudwatch:*:<AWS_ACCOUNT_ID>:alarm:jobtracker-*"
     }
   ]
 }
