@@ -1,0 +1,152 @@
+# Gmail OAuth token refresh runbook
+
+The Gmail ingestion agent authenticates with a Google OAuth **refresh token**. The
+consent screen for Google Cloud project `jobtracker-504817` is in **Testing** mode,
+and Testing-mode refresh tokens expire **7 days** after they are minted — regardless
+of activity or test-user status. When that happens the hourly `GmailAgentFunction`
+run starts failing with:
+
+```
+invalid_grant: Token has been expired or revoked.
+```
+
+Publishing the consent screen to Production would remove the expiry, but the
+restricted `gmail.readonly` scope would then require Google's CASA security
+assessment — not worth it for a project meant to be shut down once the job search
+ends. So this is a recurring ~weekly manual chore. See open follow-up #4 in
+`jobtracker-status.md`.
+
+## How you find out
+
+- **In-app notification bell** on `https://jobtracker.ashleycjones.com` — bright
+  amber with a red dot when the last run failed or nothing has succeeded in 3 hours.
+  Click it for the error text.
+- **Email alert** from the `GmailAgentErrorAlarm` CloudWatch alarm via the
+  `IngestionAlertTopic` SNS topic (requires the one-time SNS subscription
+  confirmation link to have been clicked).
+
+## Procedure
+
+All commands run from the repo root unless noted. `.env` (gitignored) is the source
+of truth for every credential below.
+
+### 1. Confirm the token is actually expired
+
+Rules out a code/scheduling problem before re-minting anything:
+
+```bash
+set -a && source .env && set +a
+curl -s -X POST https://oauth2.googleapis.com/token \
+  -d client_id="$GOOGLE_CLIENT_ID" \
+  -d client_secret="$GOOGLE_CLIENT_SECRET" \
+  -d refresh_token="$GOOGLE_REFRESH_TOKEN" \
+  -d grant_type=refresh_token
+```
+
+`invalid_grant: Token has been expired or revoked.` confirms it. A `200` with an
+`access_token` means the token is fine and the failure is something else.
+
+### 2. Check the AWS session
+
+The deploy in step 5 needs valid credentials:
+
+```bash
+aws sts get-caller-identity --profile jobtracker
+```
+
+If this reports an expired session, run `aws login --profile ashley-dev` yourself in
+a terminal (browser-based flow). The `jobtracker` profile assumes a role from that
+session and re-authenticates automatically once the base session is refreshed.
+
+### 3. Mint a new refresh token
+
+Needs a real browser, so run it directly in a terminal (in Claude Code, prefix with
+`!` so it runs in your own session):
+
+```bash
+uv run backend/scripts/gmail_auth.py
+```
+
+Complete the Google consent screen. The script prints the new refresh token.
+
+### 4. Update `.env`
+
+Paste the printed value into `.env` as `GOOGLE_REFRESH_TOKEN`. Re-run the curl from
+step 1 to confirm it now returns `200` with `"scope":
+"https://www.googleapis.com/auth/gmail.readonly"`.
+
+### 5. Build and deploy
+
+The token lives in the `jobtracker-gmail-agent` secret, which is a CloudFormation
+resource fed by a `NoEcho` parameter — so it only updates via a deploy.
+
+```bash
+cd infra
+AWS_PROFILE=jobtracker ~/.venvs/sam-cli/bin/sam build --use-container
+set -a && source ../.env && set +a
+AWS_PROFILE=jobtracker ~/.venvs/sam-cli/bin/sam deploy \
+  --stack-name jobtracker \
+  --s3-bucket "jobtracker-sam-artifacts-${AWS_ACCOUNT_ID}" \
+  --s3-prefix jobtracker \
+  --capabilities CAPABILITY_IAM \
+  --region us-east-1 \
+  --parameter-overrides \
+    FrontendOrigin=https://jobtracker.ashleycjones.com \
+    GoogleClientId="$GOOGLE_CLIENT_ID" \
+    GoogleClientSecret="$GOOGLE_CLIENT_SECRET" \
+    GoogleRefreshToken="$GOOGLE_REFRESH_TOKEN" \
+    OpenAiApiKey="$OPENAI_API_KEY" \
+    AlertEmail="$ALERT_EMAIL" \
+  --no-confirm-changeset --no-fail-on-empty-changeset
+```
+
+Notes:
+- Always `sam build` before `sam deploy`. Deploying without a fresh build silently
+  ships the stale `.aws-sam/build/template.yaml`.
+- `SessionSecret` is deliberately omitted — omitting a parameter on an existing
+  stack preserves its current value, and the secret isn't recorded anywhere.
+- Only `GmailAgentSecret` should change if nothing else in the tree was edited.
+
+### 6. Verify
+
+```bash
+FN=$(AWS_PROFILE=jobtracker aws cloudformation describe-stack-resource \
+  --stack-name jobtracker --logical-resource-id GmailAgentFunction \
+  --region us-east-1 --query 'StackResourceDetail.PhysicalResourceId' --output text)
+
+AWS_PROFILE=jobtracker aws lambda invoke --function-name "$FN" \
+  --region us-east-1 /tmp/invoke.json && cat /tmp/invoke.json
+```
+
+Expect `{"found": N, "skipped": M}` with no error. `found: 0` is normal when the
+outage was short — everything in the 2-day recency window had already been ingested.
+A large `found` is normal after a long outage, up to the window limit.
+
+Then confirm the status record the bell reads is healthy:
+
+```bash
+AWS_PROFILE=jobtracker aws dynamodb get-item \
+  --table-name JobTrackerTable --region us-east-1 \
+  --key '{"job_id":{"S":"config:ingestion_status"}}'
+```
+
+Expect `success: true` and a `last_run_at` of just now.
+
+Note the DynamoDB key schema is a single `job_id` partition key — config rows are
+`config:<name>`, not a `pk`/`sk` pair.
+
+## Gotchas
+
+- **`aws lambda invoke` can double-invoke on a slow cold start.** The CLI may retry
+  mid-flight during a ~16s cold start and return the second call's response. Both
+  really run. Harmless — `gmail_agent.py` dedupes against DynamoDB before writing.
+- **The CloudWatch alarm may sit in `ALARM` right after a fix**, because its 1-hour
+  lookback still includes the pre-fix failures. It self-clears after a full
+  error-free hour.
+
+## Log of past refreshes
+
+| Date | Trigger | Result |
+| --- | --- | --- |
+| 2026-08-28 | Silent outage since 2026-08-15, found manually 13 days later | `{"found": 33, "skipped": 26}` — backlog cleared. Alerting added the same day so it can't go unnoticed again. |
+| 2026-09-04 | Routine refresh | `{"found": 0, "skipped": 27}` — 27 emails in window, all already tracked, no new jobs. |
